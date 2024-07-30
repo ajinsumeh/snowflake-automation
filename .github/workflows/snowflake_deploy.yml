@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'snowflake_queries.sql'
+      - '.github/sql_script/snowflake_queries.sql'
 
 jobs:
   deploy:
