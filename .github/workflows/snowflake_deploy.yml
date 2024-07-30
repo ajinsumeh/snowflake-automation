@@ -3,6 +3,8 @@ name: Snowflake Deploy
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'snowflake_queries.sql'
 
 jobs:
   deploy:
