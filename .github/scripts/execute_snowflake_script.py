@@ -23,7 +23,7 @@ try:
     cursor = conn.cursor()
     
     # Read SQL from file
-    with open('snowflake_queries.sql', 'r') as file:
+    with open('.github/sql_script/snowflake_queries.sql', 'r') as file:
         sql_queries = file.read()
     
     # Execute SQL queries
