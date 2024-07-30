@@ -22,11 +22,16 @@ conn = snowflake.connector.connect(
 try:
     cursor = conn.cursor()
     
-    # Execute SQL to alter the table
-    alter_sql = "ALTER TABLE TEST_DB.PUBLIC.EMPLOYEE ADD COLUMN CONTACT VARCHAR(40)"
-    cursor.execute(alter_sql)
+    # Read SQL from file
+    with open('snowflake_queries.sql', 'r') as file:
+        sql_queries = file.read()
     
-    print("Table altered successfully")
+    # Execute SQL queries
+    for query in sql_queries.split(';'):
+        if query.strip():
+            cursor.execute(query)
+    
+    print("Queries executed successfully")
 
 finally:
     cursor.close()
