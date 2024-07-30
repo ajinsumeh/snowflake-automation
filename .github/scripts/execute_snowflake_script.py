@@ -23,7 +23,7 @@ try:
     cursor = conn.cursor()
     
     # Execute SQL to alter the table
-    alter_sql = "ALTER TABLE TEST_DB.PUBLIC.EMPLOYEE MODIFY COLUMN NAME VARCHAR(40)"
+    alter_sql = "ALTER TABLE TEST_DB.PUBLIC.EMPLOYEE ADD COLUMN CONTACT VARCHAR(40)"
     cursor.execute(alter_sql)
     
     print("Table altered successfully")
