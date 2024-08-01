@@ -15,4 +15,6 @@ insert into TEST_DB.PUBLIC.EMPLOYEE values ('def','789','Y');*/
 
 --alter table TEST_DB.PUBLIC.EMPLOYEE add column dummy varchar(15);
 
-insert into TEST_DB.PUBLIC.EMPLOYEE values ('stu','789','Y','abcd');
+--insert into TEST_DB.PUBLIC.EMPLOYEE values ('stu','789','Y','abcd');
+
+insert into TEST_DB.PUBLIC.EMPLOYEE values ('uvw','789','Y','abcd');
