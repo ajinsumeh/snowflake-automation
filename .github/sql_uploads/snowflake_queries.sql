@@ -19,4 +19,4 @@ insert into TEST_DB.PUBLIC.EMPLOYEE values ('def','789','Y');*/
 
 --insert into TEST_DB.PUBLIC.EMPLOYEE values ('uvw','789','Y','abcd');
 
-insert into TEST_DB.PUBLIC.EMPLOYEE values ('Lavanya','23456','Y');
+insert into TEST_DB.PUBLIC.EMPLOYEE values ('Harshitha','23456','Y');
