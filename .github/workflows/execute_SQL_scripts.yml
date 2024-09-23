@@ -1,36 +1,36 @@
-name: Execute SQL Files
-on:
-  push:
-    paths:
-      - '.github/sql_uploads/**'
-      - '.github/sql_script/**'
-jobs:
-  execute_sql_files:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Use Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install snowflake-connector-python
-    - name: Execute SQL Files
-      env:
-        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-      run: |
-        for folder in "sql_uploads" "sql_script"; do
-          for file in .github/$folder/*.sql .github/$folder/*.txt; do
-            if [ -f "$file" ]; then
-              echo "Processing $file"
-              python .github/scripts/execute_snowflake_script.py "$file"
-            fi
-          done
-        done
+# name: Execute SQL Files
+# on:
+#   push:
+#     paths:
+#       - '.github/sql_uploads/**'
+#       - '.github/sql_script/**'
+# jobs:
+#   execute_sql_files:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - uses: actions/checkout@v2
+#     - name: Use Python
+#       uses: actions/setup-python@v2
+#       with:
+#         python-version: '3.x'
+#     - name: Install dependencies
+#       run: |
+#         python -m pip install --upgrade pip
+#         pip install snowflake-connector-python
+#     - name: Execute SQL Files
+#       env:
+#         SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+#         SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+#         SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+#         SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+#         SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+#         SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+#       run: |
+#         for folder in "sql_uploads" "sql_script"; do
+#           for file in .github/$folder/*.sql .github/$folder/*.txt; do
+#             if [ -f "$file" ]; then
+#               echo "Processing $file"
+#               python .github/scripts/execute_snowflake_script.py "$file"
+#             fi
+#           done
+#         done
