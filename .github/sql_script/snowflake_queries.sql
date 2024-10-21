@@ -15,3 +15,5 @@ insert into GITHUB_REPO.TEST.EMPLOYEE2 values (4,'Ajin','Y');
 insert into GITHUB_REPO.TEST.EMPLOYEE2 values (5,'Ajin','Y');
 
 insert into GITHUB_REPO.TEST.EMPLOYEE2 values (6,'Ajin','Y');
+
+insert into GITHUB_REPO.TEST.EMPLOYEE2 values (7,'Ajin','Y');
