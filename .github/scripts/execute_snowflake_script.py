@@ -46,15 +46,14 @@ def execute_sql_file(file_path):
         
         queries = [q.strip() for q in sql_queries.split(';') if q.strip()]
         
-        print(f"Queries to execute: {queries}")
+        #print(f"Queries to execute: {queries}")
         
         # Execute SQL queries
-        for query in queries:
-            for i in range (1,len(queries)+1):
-                print("Query "+str(i)+"is: "+{query})
-                print(f"Executing query: {query}")
-                cursor.execute(query)
-                print("Query executed successfully")
+        for i, query in enumerate(queries, 1):
+            print(f"Query {i} is: {query}")
+            print(f"Executing query: {query}")
+            cursor.execute(query)
+            print("Query executed successfully")
         
         print(f"All queries in {file_path} executed successfully")
 
