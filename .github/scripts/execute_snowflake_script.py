@@ -50,7 +50,7 @@ def execute_sql_file(file_path):
         
         # Execute SQL queries
         for query in queries:
-            for i in range (1,len(queries+1):
+            for i in range (1,len(queries+1)):
                 print("Query "+str(i)+"is: "+{query})
                 print(f"Executing query: {query}")
                 cursor.execute(query)
