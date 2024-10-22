@@ -1,0 +1,1 @@
+insert into GITHUB_REPO.TEST.EMPLOYEE2 values (8,'Ajin','Y');
