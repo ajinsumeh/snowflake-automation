@@ -44,7 +44,7 @@ jobs:
         # Get list of changed files in the push
         #Compares files between the previous commit and current commit
         #scope of change only limited to sql_scripts directory
-        CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
+        CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
 
         #to check if the changed files are not empty
         if [ ! -z "$CHANGED_FILES" ]; then
