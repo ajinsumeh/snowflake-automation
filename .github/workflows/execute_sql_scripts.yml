@@ -4,12 +4,12 @@ on:
     branches:
       - main 
     paths:
-      - '.github/sql_scripts/**'
+      - '.github/sql_script/**'
   pull_request: # trigger when a pull request is made to merge changes to main branch for sql_scripts directory
       branches:
       - main
       paths:
-      - '.github/sql_scripts/**'
+      - '.github/sql_script/**'
       
 jobs:
   execute_sql_scripts:
