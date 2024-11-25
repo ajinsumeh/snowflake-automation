@@ -1,60 +1,44 @@
-name: Execute SQL Scripts
+name: Conditional SQL Script Review
+
 on:
-  push: # trigger a workflow when a push is made to the main branch for commits to sql_scripts directory
+  pull_request:
     branches:
-      - main 
-    paths:
-      - '.github/sql_script/**'
-  pull_request: # trigger when a pull request is made to merge changes to main branch for sql_scripts directory
-      branches:
       - main
-      paths:
-      - '.github/sql_script/**'
-      
+    paths:
+      - '.github/sql_scripts/**'
+
 jobs:
-  execute_sql_scripts:
-    runs-on: ubuntu-latest # I am specifying the OS
+  check_sql_content:
+    runs-on: ubuntu-latest
+    outputs:
+      requires_review: ${{ steps.check_content.outputs.needs_review }}
     steps:
-    # We provide access to the code,branches in GitHub to the workflow. Allows access to SQL scripts
-    - uses: actions/checkout@v2 
-      with:
-      #I specify how much git history I want to retrieve
-        fetch-depth: 2  # To get the previous 2 commits
-
-    - name: Use Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.x'
-
-    - name: Install dependencies
+    - uses: actions/checkout@v2
+    - name: Check SQL Content
+      id: check_content
       run: |
-        python -m pip install --upgrade pip
-        # python interacts with snowflake through below extension
-        pip install snowflake-connector-python
-
-    - name: Execute SQL Scripts
-      env:
-        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
-        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
-      run: |
-        # Get list of changed files in the push
-        #Compares files between the previous commit and current commit
-        #scope of change only limited to sql_scripts directory
-        CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
-
-        #to check if the changed files are not empty
-        if [ ! -z "$CHANGED_FILES" ]; then
-          for file in $CHANGED_FILES; do
-            if [ -f "$file" ]; then # I check if the file exists
-              echo "Processing changed file: $file"
-              # call the python function
-              python .github/scripts/execute_snowflake_script.py "$file"
-            fi
-          done
+        # Check if the PR contains CREATE SCHEMA statements
+        SCHEMA_CREATE_COUNT=$(git diff origin/${{ github.base_ref }} HEAD -- '.github/sql_scripts/' | grep -c 'CREATE SCHEMA')
+        
+        if [ $SCHEMA_CREATE_COUNT -gt 0 ]; then
+          echo "needs_review=true" >> $GITHUB_OUTPUT
         else
-          echo "No SQL files were changed in this push"
+          echo "needs_review=false" >> $GITHUB_OUTPUT
         fi
+
+  require_reviewers:
+    needs: check_sql_content
+    if: needs.check_sql_content.outputs.requires_review == 'true'
+    runs-on: ubuntu-latest
+    steps:
+    - name: Request Reviews
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{secrets.GITHUB_TOKEN}}
+        script: |
+          github.rest.pulls.requestReviewers({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.issue.number,
+            reviewers: ['architect1', 'architect2'] // Replace with actual GitHub usernames
+          })
