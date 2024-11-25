@@ -1,72 +1,60 @@
-import os
-import sys
-import snowflake.connector
-import re
+name: Execute SQL Scripts
+on:
+  push: # trigger a workflow when a push is made to the main branch for commits to sql_scripts directory
+    branches:
+      - main 
+    paths:
+      - '.github/sql_scripts/**'
+  pull_request: # trigger when a pull request is made to merge changes to main branch for sql_scripts directory
+      branches:
+      - main
+      paths:
+      - '.github/sql_scripts/**'
+      
+jobs:
+  execute_sql_scripts:
+    runs-on: ubuntu-latest # I am specifying the OS
+    steps:
+    # We provide access to the code,branches in GitHub to the workflow. Allows access to SQL scripts
+    - uses: actions/checkout@v2 
+      with:
+      #I specify how much git history I want to retrieve
+        fetch-depth: 2  # To get the previous 2 commits
 
-# Snowflake connection parameters
-account = os.environ['SNOWFLAKE_ACCOUNT']
-user = os.environ['SNOWFLAKE_USER']
-password = os.environ['SNOWFLAKE_PASSWORD']
-role = os.environ['SNOWFLAKE_ROLE']
-warehouse = os.environ['SNOWFLAKE_WAREHOUSE']
-database = os.environ['SNOWFLAKE_DATABASE']
+    - name: Use Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: '3.x'
 
-def remove_comments(sql):
-    # Remove inline comments
-    sql = re.sub(r'--.*$', '', sql, flags=re.MULTILINE)
-    # Remove multi-line comments
-    sql = re.sub(r'/\*[\s\S]*?\*/', '', sql)
-    return sql
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # python interacts with snowflake through below extension
+        pip install snowflake-connector-python
 
-def execute_sql_file(file_path):
-    print(f"Processing file: {file_path}")
-    
-    # Connect to Snowflake
-    conn = snowflake.connector.connect(
-        account=account,
-        user=user,
-        password=password,
-        role=role,
-        warehouse=warehouse,
-        database=database
-    )
+    - name: Execute SQL Scripts
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+        SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+        SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+      run: |
+        # Get list of changed files in the push
+        #Compares files between the previous commit and current commit
+        #scope of change only limited to sql_scripts directory
+        CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
 
-    try:
-        cursor = conn.cursor()
-        
-        # Read SQL from file
-        with open(file_path, 'r') as file:
-            sql_queries = file.read()
-        
-        print(f"Original SQL:\n{sql_queries}")
-        
-        # Remove comments and split into individual queries
-        sql_queries = remove_comments(sql_queries)
-        print(f"SQL after removing comments:\n{sql_queries}")
-        
-        queries = [q.strip() for q in sql_queries.split(';') if q.strip()]
-        
-        #print(f"Queries to execute: {queries}")
-        
-        # Execute SQL queries
-        for i, query in enumerate(queries, 1):
-            print(f"Query {i} is: {query}")
-            print(f"Executing query: {query}")
-            cursor.execute(query)
-            print("Query executed successfully")
-        
-        print(f"All queries in {file_path} executed successfully")
-
-    except snowflake.connector.errors.ProgrammingError as e:
-        print(f"Error executing SQL from {file_path}: {e}")
-    finally:
-        cursor.close()
-        conn.close()
-
-if __name__ == "__main__":
-    if len(sys.argv) != 2:
-        print("Usage: python execute_snowflake_script.py <sql_file_path>")
-        sys.exit(1)
-    
-    sql_file_path = sys.argv[1]
-    execute_sql_file(sql_file_path)
+        #to check if the changed files are not empty
+        if [ ! -z "$CHANGED_FILES" ]; then
+          for file in $CHANGED_FILES; do
+            if [ -f "$file" ]; then # I check if the file exists
+              echo "Processing changed file: $file"
+              # call the python function
+              python .github/scripts/execute_snowflake_script.py "$file"
+            fi
+          done
+        else
+          echo "No SQL files were changed in this push"
+        fi
