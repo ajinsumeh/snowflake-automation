@@ -43,19 +43,19 @@ jobs:
       - name: Check for SQL script changes
         id: check_sql_changes
         run: |
-          # Fetch full diff between base and head
+          # Use explicit base and head SHAs for diffing
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
           echo "Changed SQL files: $CHANGED_FILES"
           
           # Check if changed files are not empty
-          if [ ! -z "$CHANGED_FILES" ]; then
+          if [ -n "$CHANGED_FILES" ]; then
             CREATE_SCRIPT_FOUND=false
+            
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
                 # Read the content of the file and check for 'CREATE' statement
-                CONTENT=$(cat "$file")
-                if echo "$CONTENT" | grep -iq "CREATE"; then
+                if grep -iq "CREATE" "$file"; then
                   CREATE_SCRIPT_FOUND=true
                   echo "CREATE statement found in $file"
                   break
@@ -64,20 +64,20 @@ jobs:
             done
             
             if [ "$CREATE_SCRIPT_FOUND" = true ]; then
-              echo "create_script=true" >> $GITHUB_ENV
+              echo "create_script=true" >> "$GITHUB_ENV"
             else
-              echo "create_script=false" >> $GITHUB_ENV
+              echo "create_script=false" >> "$GITHUB_ENV"
             fi
           else
             echo "No SQL files were changed in this pull request"
-            echo "create_script=false" >> $GITHUB_ENV
+            echo "create_script=false" >> "$GITHUB_ENV"
           fi
 
       - name: Assign reviewer
         if: env.create_script == 'true'
         run: |
           # Attempt to add reviewer using GitHub CLI
-          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231
+          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -99,14 +99,17 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: |
+          # Use explicit base and head SHAs for diffing
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
-          if [ ! -z "$CHANGED_FILES" ]; then
-            SCRIPT_EXECUTION_FAILED=false
+          SCRIPT_EXECUTION_FAILED=false
+          
+          if [ -n "$CHANGED_FILES" ]; then
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
                 echo "Processing changed file: $file"
                 python .github/scripts/execute_snowflake_script.py "$file" || SCRIPT_EXECUTION_FAILED=true
+              fi
             done
             
             if [ "$SCRIPT_EXECUTION_FAILED" = true ]; then
