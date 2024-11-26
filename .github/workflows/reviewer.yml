@@ -5,7 +5,7 @@ on:
     branches:
       - main
     paths:
-      - '.github/sql_scripts/**'
+      - '.github/sql_script/**'
 
 jobs:
   execute_sql_scripts:
@@ -30,7 +30,7 @@ jobs:
         id: check_sql_changes
         run: |
           # Get list of changed files in the pull request
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
           # Check if changed files are not empty
           if [ ! -z "$CHANGED_FILES" ]; then
@@ -66,7 +66,7 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
           if [ ! -z "$CHANGED_FILES" ]; then
             for file in $CHANGED_FILES; do
