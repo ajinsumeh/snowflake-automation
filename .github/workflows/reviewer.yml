@@ -27,10 +27,6 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-
       - name: Check for CREATE statements in SQL files
         id: check_sql_changes
         run: |
@@ -38,16 +34,17 @@ jobs:
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
 
           echo "Changed SQL files: $CHANGED_FILES"
-          
+
+          # Initialize environment variable for script evaluation
+          CREATE_STATEMENT_FOUND=false
+
           if [ -n "$CHANGED_FILES" ]; then
-            CREATE_STATEMENT_FOUND=false
-            
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
                 echo "Analyzing file: $file"
 
-                # Remove comments and check for CREATE statements
-                SQL_CONTENT=$(grep -vE '^\s*(--|/\*|.*\*/)' "$file")
+                # Remove single-line and multiline comments, then check for CREATE statements
+                SQL_CONTENT=$(sed -E '/^\s*--/d' "$file" | sed -E ':a;N;$!ba;s/\s*\/\*.*?\*\///g')
                 if echo "$SQL_CONTENT" | grep -iq "CREATE"; then
                   CREATE_STATEMENT_FOUND=true
                   echo "CREATE statement found in $file"
@@ -55,19 +52,18 @@ jobs:
                 fi
               fi
             done
-            
-            if [ "$CREATE_STATEMENT_FOUND" = true ]; then
-              echo "create_script=true" >> "$GITHUB_ENV"
-            else
-              echo "create_script=false" >> "$GITHUB_ENV"
-            fi
+          fi
+
+          # Set the appropriate environment variable
+          if [ "$CREATE_STATEMENT_FOUND" = true ]; then
+            echo "create_script=true" >> "$GITHUB_ENV"
           else
-            echo "No SQL files were changed in this pull request"
             echo "create_script=false" >> "$GITHUB_ENV"
+          fi
 
       - name: Log message
         run: |
           if [ "$create_script" = "true" ]; then
-            echo "CREATE statement detected. Reviewer required: notyou1231"
+            echo "✅ CREATE statement detected. Reviewer required: notyou1231"
           else
-            echo "No CREATE statement found. No reviewer required."
+            echo "ℹ️ No CREATE statement found. No reviewer required."
