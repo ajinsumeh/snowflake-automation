@@ -65,6 +65,10 @@ jobs:
         run: |
           if [ "$create_script" = "true" ]; then
             echo "✅ CREATE statement detected. Reviewer required: Notyou1231"
+            # Add reviewer to PR using GitHub CLI
+            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
           else
             echo "ℹ️ No CREATE statement found. No reviewer required."
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
