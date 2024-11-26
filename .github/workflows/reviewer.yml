@@ -1,36 +1,80 @@
-name: Add Reviewers on PR with CREATE Statements
+name: Execute SQL Scripts and Assign Reviewer
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    branches:
+      - main
+    paths:
+      - '.github/sql_scripts/**'
 
 jobs:
-  add-reviewers:
+  execute_sql_scripts:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2  # To get the previous 2 commits
 
-      - name: Check for CREATE statements in changed SQL files
-        id: check-create
+      - name: Use Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/main | grep -E '\.sql$' || true)
-          echo "Changed SQL files: $CHANGED_FILES"
-          for file in $CHANGED_FILES; do
-            if grep -qi 'create' "$file"; then
-              echo "CREATE statement found in $file"
-              echo "create_found=true" >> $GITHUB_ENV
-              break
-            fi
-          done
+          python -m pip install --upgrade pip
+          pip install snowflake-connector-python
 
-      - name: Add reviewers
-        if: env.create_found == 'true'
+      - name: Check for SQL script changes and assign reviewer
+        id: check_sql_changes
+        run: |
+          # Get list of changed files in the pull request
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
+          
+          # Check if changed files are not empty
+          if [ ! -z "$CHANGED_FILES" ]; then
+            for file in $CHANGED_FILES; do
+              if [ -f "$file" ]; then
+                # Read the content of the file and check for 'CREATE' statement
+                CONTENT=$(cat "$file")
+                if echo "$CONTENT" | grep -iq "CREATE"; then
+                  echo "create_script=true" >> $GITHUB_ENV
+                else
+                  echo "create_script=false" >> $GITHUB_ENV
+                fi
+              fi
+            done
+          else
+            echo "No SQL files were changed in this pull request"
+            echo "create_script=false" >> $GITHUB_ENV
+          fi
+
+      - name: Assign reviewer if CREATE statement is found
+        if: env.create_script == 'true'
+        uses: kentaro-m/auto-assign-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          reviewers: 'Notyou1231'
+
+      - name: Execute SQL Scripts
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+          SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+          SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+          SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: |
-          curl -X POST \
-            -H "Authorization: token $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github.v3+json" \
-            https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
-            -d '{"reviewers":["reviewer_username1","reviewer_username2"]}'
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_scripts/.*\.(sql|txt)$' || true)
+          
+          if [ ! -z "$CHANGED_FILES" ]; then
+            for file in $CHANGED_FILES; do
+              if [ -f "$file" ]; then
+                echo "Processing changed file: $file"
+                python .github/scripts/execute_snowflake_script.py "$file"
+              fi
+            done
+          else
+            echo "No SQL files were changed in this push"
+          fi
