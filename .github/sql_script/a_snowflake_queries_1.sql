@@ -1,6 +1,6 @@
 --hello I am going to automate github snowflake automation
 
-create or replace table abc(id int, name varchar(20));
+create or replace table abcd(id int, name varchar(20));
 
 -- This is data row 1
 insert into TEST_DATABASE.GIT_FETCH.EMPLOYEE values (1,'Ajin');
