@@ -1,4 +1,5 @@
 name: Execute SQL Scripts and Assign Reviewer
+
 on:
   pull_request:
     branches:
@@ -6,17 +7,22 @@ on:
     paths:
       - '.github/sql_script/**'
 
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   execute_sql_scripts:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4  # Updated to latest version
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0  # Fetch full history for accurate diffing
 
       - name: Set up Python
-        uses: actions/setup-python@v5  # Updated to latest version
+        uses: actions/setup-python@v5
         with:
           python-version: '3.x'
 
@@ -32,6 +38,7 @@ jobs:
           echo "Head Branch: ${{ github.head_ref }}"
           echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
           echo "Head SHA: ${{ github.event.pull_request.head.sha }}"
+          echo "Pull Request Number: ${{ github.event.pull_request.number }}"
 
       - name: Check for SQL script changes
         id: check_sql_changes
@@ -66,21 +73,24 @@ jobs:
             echo "create_script=false" >> $GITHUB_ENV
           fi
 
-      - name: Assign reviewer if CREATE statement is found
+      - name: Assign reviewer
         if: env.create_script == 'true'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            github.rest.pulls.requestReviewers({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              pull_number: context.issue.number,
-              reviewers: ['Notyou1231']
-            })
+        run: |
+          # Attempt to add reviewer using GitHub CLI
+          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create comment if reviewer assignment fails
+        if: failure()
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "⚠️ Automated Reviewer Assignment Failed. Please manually assign a reviewer."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Execute SQL Scripts
-        if: success()  # Only run if previous steps succeed
+        if: success()
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -92,17 +102,22 @@ jobs:
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
           if [ ! -z "$CHANGED_FILES" ]; then
+            SCRIPT_EXECUTION_FAILED=false
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
                 echo "Processing changed file: $file"
-                python .github/scripts/execute_snowflake_script.py "$file"
-              fi
+                python .github/scripts/execute_snowflake_script.py "$file" || SCRIPT_EXECUTION_FAILED=true
             done
+            
+            if [ "$SCRIPT_EXECUTION_FAILED" = true ]; then
+              echo "::error::SQL Script Execution Failed"
+              exit 1
+            fi
           else
             echo "No SQL files were changed in this push"
           fi
 
-      - name: Failure Notification
+      - name: Notify on SQL Script Execution Failure
         if: failure()
         uses: actions/github-script@v7
         with:
@@ -112,5 +127,13 @@ jobs:
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
-              body: ' SQL Script Execution Failed. Please review the workflow logs for details.'
+              body: '❌ SQL Script Execution Failed. Please review the workflow logs for details.'
             })
+
+      - name: Success Notification
+        if: success()
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "✅ SQL Scripts processed successfully. Ready for review!"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
