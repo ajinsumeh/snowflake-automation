@@ -8,6 +8,7 @@ on:
       - '.github/sql_scripts/**'
 
 jobs:
+
   check_sql_content:
     runs-on: ubuntu-latest
     outputs:
@@ -17,10 +18,10 @@ jobs:
     - name: Check SQL Content
       id: check_content
       run: |
-        # Check if the PR contains CREATE SCHEMA statements
-        SCHEMA_CREATE_COUNT=$(git diff origin/${{ github.base_ref }} HEAD -- '.github/sql_scripts/' | grep -c 'CREATE SCHEMA')
+        # Check if the PR contains CREATE statements
+        CREATE_STATEMENT_COUNT=$(git diff origin/${{ github.base_ref }} HEAD -- '.github/sql_scripts/' | grep -c 'CREATE')
         
-        if [ $SCHEMA_CREATE_COUNT -gt 0 ]; then
+        if [ $CREATE_STATEMENT_COUNT -gt 0 ]; then
           echo "needs_review=true" >> $GITHUB_OUTPUT
         else
           echo "needs_review=false" >> $GITHUB_OUTPUT
@@ -40,5 +41,5 @@ jobs:
             owner: context.repo.owner,
             repo: context.repo.repo,
             pull_number: context.issue.number,
-            reviewers: ['Notyou1231'] 
+            reviewers: ['Notyou1231'] # Replace with actual GitHub usernames
           })
