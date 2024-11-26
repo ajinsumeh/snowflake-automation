@@ -1,4 +1,4 @@
-name: Assign Reviewer for Create Statements
+name: Review and Merge SQL Scripts
 
 on:
   pull_request:
@@ -13,8 +13,9 @@ permissions:
   issues: write
 
 jobs:
-  assign_reviewer:
+  review_sql_scripts:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -26,61 +27,64 @@ jobs:
         with:
           python-version: '3.x'
 
-      - name: Debug PR Information
-        run: |
-          echo "Repository: ${{ github.repository }}"
-          echo "Base Branch: ${{ github.base_ref }}"
-          echo "Head Branch: ${{ github.head_ref }}"
-          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
-          echo "Head SHA: ${{ github.event.pull_request.head.sha }}"
-          echo "Pull Request Number: ${{ github.event.pull_request.number }}"
-
-      - name: Check for SQL script changes
+      - name: Check for CREATE statements in SQL files
         id: check_sql_changes
         run: |
-          # Get the list of changed files between base and head commits
+          # Use explicit base and head SHAs for diffing
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
-          
+
           echo "Changed SQL files: $CHANGED_FILES"
-          
-          # Check for CREATE statement in any changed SQL file
+
+          # Initialize environment variable for script evaluation
+          CREATE_STATEMENT_FOUND=false
+
           if [ -n "$CHANGED_FILES" ]; then
-            CREATE_SCRIPT_FOUND=false
-            
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
-                # Look for CREATE statement in each file
-                if grep -iq "CREATE" "$file"; then
-                  CREATE_SCRIPT_FOUND=true
+                echo "Analyzing file: $file"
+
+                # Remove single-line and multiline comments, then check for CREATE statements
+                SQL_CONTENT=$(sed -E '/^\s*--/d' "$file" | sed -E ':a;N;$!ba;s/\s*\/\*.*?\*\///g')
+                if echo "$SQL_CONTENT" | grep -iq "CREATE"; then
+                  CREATE_STATEMENT_FOUND=true
                   echo "CREATE statement found in $file"
                   break
                 fi
               fi
             done
-            
-            if [ "$CREATE_SCRIPT_FOUND" = true ]; then
-              echo "create_script=true" >> "$GITHUB_ENV"
-            else
-              echo "create_script=false" >> "$GITHUB_ENV"
-            fi
+          fi
+
+          # Set the appropriate environment variable
+          if [ "$CREATE_STATEMENT_FOUND" = true ]; then
+            echo "create_script=true" >> "$GITHUB_ENV"
           else
-            echo "No SQL files were changed in this pull request"
             echo "create_script=false" >> "$GITHUB_ENV"
           fi
 
-      - name: Assign reviewer
-        if: env.create_script == 'true'
+      - name: Log message and assign reviewer
         run: |
-          # Add a reviewer only if CREATE statement is detected
-          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
+          if [ "$create_script" = "true" ]; then
+            echo "✅ CREATE statement detected. Reviewer required: Notyou1231"
+            # Add reviewer to PR using GitHub CLI
+            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
+          else
+            echo "ℹ️ No CREATE statement found. No reviewer required."
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create comment if reviewer assignment fails
-        if: failure()
+      - name: Notify if CREATE script is missing reviewer
+        if: failure() && env.create_script == 'true'
         run: |
           gh pr comment ${{ github.event.pull_request.number }} \
-            --body "⚠️ Automated Reviewer Assignment Failed. Please manually assign a reviewer."
+            --body "⚠️ No reviewer was assigned. Please assign a reviewer manually."
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Review Notification
+        if: success() && env.create_script == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "✅ Reviewer has been assigned and PR is pending approval before merge."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
