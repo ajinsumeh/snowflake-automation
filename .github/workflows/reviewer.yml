@@ -61,9 +61,10 @@ jobs:
             echo "create_script=false" >> "$GITHUB_ENV"
           fi
 
-      - name: Log message
+      - name: Log message and assign reviewer
         run: |
           if [ "$create_script" = "true" ]; then
             echo "✅ CREATE statement detected. Reviewer required: notyou1231"
           else
             echo "ℹ️ No CREATE statement found. No reviewer required."
+          fi
