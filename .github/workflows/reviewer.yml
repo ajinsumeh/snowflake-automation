@@ -52,7 +52,7 @@ jobs:
 
       - name: Assign reviewer if CREATE statement is found
         if: env.create_script == 'true'
-        uses: kentaro-m/auto-assign-action@v1
+        uses: kentaro-m/auto-assign-action@v1.2.1
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           reviewers: 'Notyou1231'
