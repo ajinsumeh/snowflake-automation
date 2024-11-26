@@ -1,45 +1,36 @@
-name: Add Reviewers for CREATE Statements
+name: Add Reviewers on PR with CREATE Statements
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [opened, synchronize, reopened]
 
 jobs:
   add-reviewers:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-      with:
-        fetch-depth: 0 # Fetch full history to ensure access to main branch
+      - name: Checkout repository
+        uses: actions/checkout@v3
 
-    - name: Fetch Main Branch
-      run: |
-        git fetch origin main # Fetch main branch explicitly
+      - name: Check for CREATE statements in changed SQL files
+        id: check-create
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/main | grep -E '\.sql$' || true)
+          echo "Changed SQL files: $CHANGED_FILES"
+          for file in $CHANGED_FILES; do
+            if grep -qi 'create' "$file"; then
+              echo "CREATE statement found in $file"
+              echo "create_found=true" >> $GITHUB_ENV
+              break
+            fi
+          done
 
-    - name: Detect CREATE Statements
-      id: check_create
-      run: |
-        # Identify changed SQL files
-        CHANGED_FILES=$(git diff --name-only origin/main | grep -E '\.sql$' || true)
-        echo "Changed SQL files: $CHANGED_FILES"
-
-        # Check for CREATE statements
-        create_found=false
-        for file in $CHANGED_FILES; do
-          if grep -qi 'create' "$file"; then
-            echo "CREATE statement found in $file"
-            create_found=true
-            break
-          fi
-        done
-
-        echo "create_found=$create_found" >> $GITHUB_ENV
-
-    - name: Add Reviewers
-      if: env.create_found == 'true'
-      uses: peter-evans/add-reviewers@v3
-      with:
-        reviewers: |
-          Notyou1231
+      - name: Add reviewers
+        if: env.create_found == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -X POST \
+            -H "Authorization: token $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers \
+            -d '{"reviewers":["reviewer_username1","reviewer_username2"]}'
