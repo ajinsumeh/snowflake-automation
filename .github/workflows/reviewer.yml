@@ -1,5 +1,4 @@
 name: Execute SQL Scripts and Assign Reviewer
-
 on:
   pull_request:
     branches:
@@ -12,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4  # Updated to latest version
         with:
-          fetch-depth: 2  # To get the previous 2 commits
+          fetch-depth: 0  # Fetch full history for accurate diffing
 
-      - name: Use Python
-        uses: actions/setup-python@v2
+      - name: Set up Python
+        uses: actions/setup-python@v5  # Updated to latest version
         with:
           python-version: '3.x'
 
@@ -26,25 +25,42 @@ jobs:
           python -m pip install --upgrade pip
           pip install snowflake-connector-python
 
-      - name: Check for SQL script changes and assign reviewer
+      - name: Debug PR Information
+        run: |
+          echo "Repository: ${{ github.repository }}"
+          echo "Base Branch: ${{ github.base_ref }}"
+          echo "Head Branch: ${{ github.head_ref }}"
+          echo "Base SHA: ${{ github.event.pull_request.base.sha }}"
+          echo "Head SHA: ${{ github.event.pull_request.head.sha }}"
+
+      - name: Check for SQL script changes
         id: check_sql_changes
         run: |
-          # Get list of changed files in the pull request
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+          # Fetch full diff between base and head
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+          
+          echo "Changed SQL files: $CHANGED_FILES"
           
           # Check if changed files are not empty
           if [ ! -z "$CHANGED_FILES" ]; then
+            CREATE_SCRIPT_FOUND=false
             for file in $CHANGED_FILES; do
               if [ -f "$file" ]; then
                 # Read the content of the file and check for 'CREATE' statement
                 CONTENT=$(cat "$file")
                 if echo "$CONTENT" | grep -iq "CREATE"; then
-                  echo "create_script=true" >> $GITHUB_ENV
-                else
-                  echo "create_script=false" >> $GITHUB_ENV
+                  CREATE_SCRIPT_FOUND=true
+                  echo "CREATE statement found in $file"
+                  break
                 fi
               fi
             done
+            
+            if [ "$CREATE_SCRIPT_FOUND" = true ]; then
+              echo "create_script=true" >> $GITHUB_ENV
+            else
+              echo "create_script=false" >> $GITHUB_ENV
+            fi
           else
             echo "No SQL files were changed in this pull request"
             echo "create_script=false" >> $GITHUB_ENV
@@ -52,12 +68,19 @@ jobs:
 
       - name: Assign reviewer if CREATE statement is found
         if: env.create_script == 'true'
-        uses: kentaro-m/auto-assign-action@v1.2.1
+        uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          reviewers: 'Notyou1231'
+          script: |
+            github.rest.pulls.requestReviewers({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number,
+              reviewers: ['Notyou1231']
+            })
 
       - name: Execute SQL Scripts
+        if: success()  # Only run if previous steps succeed
         env:
           SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
@@ -66,7 +89,7 @@ jobs:
           SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
           SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
         run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           
           if [ ! -z "$CHANGED_FILES" ]; then
             for file in $CHANGED_FILES; do
@@ -78,3 +101,16 @@ jobs:
           else
             echo "No SQL files were changed in this push"
           fi
+
+      - name: Failure Notification
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: ' SQL Script Execution Failed. Please review the workflow logs for details.'
+            })
