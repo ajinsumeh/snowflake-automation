@@ -74,7 +74,7 @@ jobs:
             gh pr review ${{ github.event.pull_request.number }} --approve || true
           fi
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Notify if CREATE script is missing reviewer
         if: failure() && env.create_script == 'true'
@@ -82,7 +82,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "⚠️ No reviewer was assigned. Please assign a reviewer manually."
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
 
       - name: Review Notification
         if: success() && env.create_script == 'true'
@@ -90,4 +90,4 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "✅ Reviewer has been assigned and PR is pending approval before merge."
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
