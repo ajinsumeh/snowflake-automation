@@ -1,59 +1,43 @@
-name: Conditional Review Enforcement
+name: Conditional Approval for SQL PRs
 
 on:
   pull_request:
-    branches:
-      - main
-    paths:
-      - '.github/sql_script/**'
-
-permissions:
-  contents: read
-  pull-requests: write  # Needed for assigning reviewers
+    types:
+      - opened
+      - synchronize
+      - reopened
 
 jobs:
-  review_sql_scripts:
+  auto_approve:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    # Step 1: Checkout the PR's code
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-      - name: Detect CREATE statements in SQL files
-        id: detect_create_statements
-        run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
-          echo "Changed SQL files: $CHANGED_FILES"
-
-          CREATE_STATEMENT_FOUND=false
-          if [ -n "$CHANGED_FILES" ]; then
-            for file in $CHANGED_FILES; do
-              SQL_CONTENT=$(sed -E '/^\s*--/d' "$file" | sed -E ':a;N;$!ba;s/\s*\/\*.*?\*\///g')
-              if echo "$SQL_CONTENT" | grep -iq "CREATE"; then
-                CREATE_STATEMENT_FOUND=true
-                echo "CREATE statement found in $file"
-                break
-              fi
-            done
+    # Step 2: Analyze SQL files in the PR for CREATE statements
+    - name: Analyze SQL files for CREATE statements
+      id: analyze_sql
+      run: |
+        # Fetch changed files from the PR
+        changed_files=$(jq -r '.pull_request.changed_files[] | select(contains(".sql"))' <<<"${{ toJSON(github.event) }}")
+        create_found=false
+        
+        # Loop through each changed SQL file and check for CREATE statements
+        for file in $changed_files; do
+          if grep -iq "CREATE " "$file"; then
+            create_found=true
+            break
           fi
-
-          echo "create_script=${CREATE_STATEMENT_FOUND}" >> $GITHUB_ENV
-
-      - name: Add reviewer if CREATE statements found
-        if: env.create_script == 'true'
-        run: |
-          echo "Assigning reviewer for PR #${{ github.event.pull_request.number }}"
-          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Approve check
-        id: approve_check
-        run: |
-          if [ "${{ env.create_script }}" = "true" ]; then
-            echo "Reviewer approval required."
-            exit 1  # Fail if CREATE statement is found and approval hasn't occurred
-          else
-            echo "No approval required."
-            exit 0  # Pass if no CREATE statement
-          fi
+        done
+        
+        # Set the result as an environment variable
+        echo "create_found=$create_found" >> "$GITHUB_ENV"
+        
+    # Step 3: Automatically approve the PR if no CREATE statements are found
+    - name: Auto-approve PR if no CREATE statements found
+      if: env.create_found == 'false'
+      uses: hmarr/auto-approve-action@v3
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
