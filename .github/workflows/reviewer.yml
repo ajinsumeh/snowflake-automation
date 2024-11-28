@@ -22,7 +22,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install python-jose pyjwt
+          pip install python-jose pyjwt cryptography
 
       # Step 3: Generate JWT token for GitHub App authentication
       - name: Generate JWT Token
