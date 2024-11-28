@@ -1,4 +1,4 @@
-name: Review and Merge SQL Scripts
+name: Conditional Review Enforcement
 
 on:
   pull_request:
@@ -9,7 +9,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: write  # Ensure this permission to add reviewers
+  pull-requests: write  # Needed for assigning reviewers
 
 jobs:
   review_sql_scripts:
@@ -18,13 +18,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
 
       - name: Detect CREATE statements in SQL files
         id: detect_create_statements
@@ -54,9 +47,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Notify about reviewer
-        if: env.create_script == 'true'
+      - name: Approve check
+        id: approve_check
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "✅ Reviewer 'Notyou1231' has been added. Approval is required before merging."
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          if [ "${{ env.create_script }}" = "true" ]; then
+            echo "Reviewer approval required."
+            exit 1  # Fail if CREATE statement is found and approval hasn't occurred
+          else
+            echo "No approval required."
+            exit 0  # Pass if no CREATE statement
+          fi
