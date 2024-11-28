@@ -3,22 +3,28 @@ name: Auto Approve PR and SQL Diff
 on:
   pull_request:
     branches:
-      - main  # Fixed the branch declaration
+      - main
     types: [opened, synchronize, reopened]
     paths:
-      - '.github/sql_script/**'  # Correct path matching for your SQL scripts
+      - '.github/sql_scripts/**'  # Path to monitor for SQL file changes
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
   approve_pr_and_diff:
     runs-on: ubuntu-latest
     steps:
-      # Step 1: Checkout code with full history
+      
+      # Step 1: Checkout the code
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          fetch-depth: 0  # Fetch entire history for accurate SHA references
+          fetch-depth: 0  # Fetch full history to ensure accurate SHA references
 
-      # Step 2: Set up Python and install required dependencies
+      # Step 2: Set up Python and install dependencies
       - name: Set up Python
         uses: actions/setup-python@v3
         with:
@@ -26,16 +32,15 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install python-jose pyjwt cryptography jq
+          pip install PyJWT cryptography requests
 
-      # Step 3: Generate JWT token for GitHub App authentication
+      # Step 3: Generate JWT Token
       - name: Generate JWT Token
-        id: jwt
         run: |
           python .github/utils/generate_jwt.py
-          echo "JWT_TOKEN=$(cat .github/utils/jwt_token.txt)" >> $GITHUB_ENV
+          echo "JWT_TOKEN=$(cat .github/secrets/jwt_token.txt)" >> $GITHUB_ENV
 
-      # Step 4: Fetch Installation Token using JWT
+      # Step 4: Fetch Installation Token
       - name: Fetch Installation Token
         run: |
           INSTALLATION_TOKEN=$(curl -X POST -H "Authorization: Bearer $JWT_TOKEN" \
@@ -43,22 +48,15 @@ jobs:
           https://api.github.com/app/installations/INSTALLATION_ID/access_tokens | jq -r '.token')
           echo "INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> $GITHUB_ENV
 
-      # Step 5: Use explicit base and head SHAs for diffing
-      - name: Use explicit base and head SHAs for diffing
+      # Step 5: Check for changed SQL files
+      - name: Check for Changed SQL Files
         run: |
-          # Check if it's a PR event
-          if [ -n "$GITHUB_BASE_REF" ]; then
-            BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
-            HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
-          else
-            # For push events, we can use the same SHA for both base and head
-            BASE_SHA=$GITHUB_SHA
-            HEAD_SHA=$GITHUB_SHA
-          fi
+          BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
+          HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
           echo "Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
           
-          # List Changed SQL Files in sql_scripts folder
-          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^\.github/sql_script/.*\.sql$')
+          # List Changed SQL Files
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^.github/sql_scripts/.*\.sql$')
           echo "Changed SQL files: $CHANGED_FILES"
           
           if [ -z "$CHANGED_FILES" ]; then
@@ -67,12 +65,11 @@ jobs:
           fi
 
       # Step 6: Check for CREATE statement and auto-approve PR if absent
-      - name: Auto-approve the PR
+      - name: Auto-approve the PR if no CREATE statement found
         run: |
           if grep -q "CREATE" <<< "$CHANGED_FILES"; then
             echo "CREATE statement found. Reviewer approval required."
           else
             echo "No CREATE statement found. Auto-approving the PR."
-            export GH_TOKEN=$INSTALLATION_TOKEN
             PR_NUMBER=$(jq --raw-output .pull_request.number $GITHUB_EVENT_PATH)
             gh pr review --approve --body "Auto-approved by GitHub App" $PR_NUMBER
