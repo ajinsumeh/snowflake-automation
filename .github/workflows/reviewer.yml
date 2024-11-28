@@ -7,6 +7,12 @@ on:
     paths:
       - '.github/sql_script/**'  # Trigger workflow only when files in this path change
 
+permissions:
+  pull-requests: write  # Grants permission to modify pull requests
+  contents: read        # Grants permission to read the contents of the repository
+  issues: write         # Grants permission to create issues (if needed)
+  review-requests: write # Grants permission to manage review requests
+
 jobs:
   auto_approve:
     runs-on: ubuntu-latest
@@ -20,7 +26,6 @@ jobs:
     - name: Get changed files from PR
       id: changed_files
       run: |
-        # Get the list of files changed in the PR
         PR_NUMBER=${{ github.event.pull_request.number }}
         CHANGED_FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}}/files" | jq -r '.[].filename')
@@ -74,5 +79,5 @@ jobs:
         echo "CREATE statements found. Adding 'notyou1231' as a reviewer."
         curl -X POST \
           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"reviewers":["notyou1231"]}' \
+          -d '{"reviewers":["Notyou1231"]}' \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers"
