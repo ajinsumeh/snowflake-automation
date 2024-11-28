@@ -1,89 +1,68 @@
-name: Review and Merge SQL Scripts
+name: Auto Approve PR and SQL Diff
 
 on:
   pull_request:
-    branches:
-      - main
-    paths:
-      - '.github/sql_script/**'
-
-permissions:
-  contents: read
-  pull-requests: write
+    types: [opened, synchronize, reopened]
 
 jobs:
-  review_sql_scripts:
+  approve_pr_and_diff:
     runs-on: ubuntu-latest
-
     steps:
+      # Step 1: Checkout code with full history
       - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/checkout@v3
         with:
-          python-version: '3.x'
+          fetch-depth: 0  # Fetch entire history for accurate SHA references
+
+      # Step 2: Set up Python and install required dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.x
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install PyJWT cryptography python-jose
+          pip install python-jose pyjwt
+
+      # Step 3: Generate JWT token for GitHub App authentication
       - name: Generate JWT Token
-        id: generate_jwt
+        id: jwt
         run: |
           python .github/utils/generate_jwt.py
-        env:
-          APP_ID: ${{ secrets.APP_ID }}
-          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
-      
-      - name: Check for CREATE statements in SQL files
-        id: check_sql_changes
-        run: |
-          # Use explicit base and head SHAs for diffing
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+          echo "JWT_TOKEN=$(cat .github/utils/jwt_token.txt)" >> $GITHUB_ENV
 
+      # Step 4: Fetch Installation Token using JWT
+      - name: Fetch Installation Token
+        run: |
+          INSTALLATION_TOKEN=$(curl -X POST -H "Authorization: Bearer $JWT_TOKEN" \
+          -H "Accept: application/vnd.github+json" \
+          https://api.github.com/app/installations/INSTALLATION_ID/access_tokens | jq -r '.token')
+          echo "INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> $GITHUB_ENV
+
+      # Step 5: Use Installation Token to interact with GitHub API
+      - name: Use explicit base and head SHAs for diffing
+        run: |
+          BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
+          HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
+          echo "Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
+
+          # List Changed SQL Files
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '\.sql$')
           echo "Changed SQL files: $CHANGED_FILES"
-
-          # Initialize environment variable for script evaluation
-          CREATE_STATEMENT_FOUND=false
-
-          if [ -n "$CHANGED_FILES" ]; then
-            for file in $CHANGED_FILES; do
-              if [ -f "$file" ]; then
-                echo "Analyzing file: $file"
-
-                # Remove single-line and multiline comments, then check for CREATE statements
-                SQL_CONTENT=$(sed -E '/^\s*--/d' "$file" | sed -E ':a;N;$!ba;s/\s*\/\*.*?\*\///g')
-                if echo "$SQL_CONTENT" | grep -iq "CREATE"; then
-                  CREATE_STATEMENT_FOUND=true
-                  echo "CREATE statement found in $file"
-                  break
-                fi
-              fi
-            done
+          
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "No SQL files changed. Skipping PR approval."
+            exit 0
           fi
 
-          # Set the appropriate environment variable
-          if [ "$CREATE_STATEMENT_FOUND" = true ]; then
-            echo "create_script=true" >> "$GITHUB_ENV"
-          else
-            echo "create_script=false" >> "$GITHUB_ENV"
-          fi
-
-      - name: Approve PR or Notify Reviewer
+      # Step 6: Check for CREATE statement and auto-approve PR if absent
+      - name: Auto-approve the PR
         run: |
-          if [ "$create_script" = "true" ]; then
-            echo "CREATE statement found. Notify reviewer."
-            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231
+          if grep -q "CREATE" <<< "$CHANGED_FILES"; then
+            echo "CREATE statement found. Reviewer approval required."
           else
             echo "No CREATE statement found. Auto-approving the PR."
-            gh api graphql -f query='
-              mutation {
-                addPullRequestReview(input: {pullRequestId: "${{ github.event.pull_request.node_id }}", event: APPROVE, body: "Auto-approved by GitHub App"}) {
-                  clientMutationId
-                }
-              }
-            ' --header "Authorization: Bearer ${{ steps.generate_jwt.outputs.token }}"
+            export GH_TOKEN=$INSTALLATION_TOKEN
+            PR_NUMBER=$(jq --raw-output .pull_request.number $GITHUB_EVENT_PATH)
+            gh pr review --approve --body "Auto-approved by GitHub App" $PR_NUMBER
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
