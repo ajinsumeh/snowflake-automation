@@ -70,22 +70,34 @@ jobs:
             done
           fi
 
-          # Set the appropriate environment variable
+          # Set the appropriate environment variable based on whether a CREATE statement was found
           if [ "$CREATE_STATEMENT_FOUND" = true ]; then
             echo "create_script=true" >> "$GITHUB_ENV"
           else
             echo "create_script=false" >> "$GITHUB_ENV"
           fi
 
+      - name: Auto-approve PR if no CREATE statements found
+        if: env.create_script == 'false'  # Only for PRs with no CREATE statements
+        run: |
+          echo "No CREATE statement found, auto-approving PR."
+          # Use GitHub CLI to approve the PR
+          gh pr review ${{ github.event.pull_request.number }} --approve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Log message and assign reviewer
         run: |
-          if [ "$create_script" = "true" ]; then
+          echo "create_script value: ${{ env.create_script }}"
+          if [ "${{ env.create_script }}" = "true" ]; then
             echo "✅ CREATE statement detected. Reviewer required: Notyou1231"
-            # Use JWT token for GitHub App authentication to add reviewer
-            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 --token ${{ env.JWT_TOKEN }} || true
+            # Add reviewer to PR using GitHub CLI
+            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
           else
             echo "ℹ️ No CREATE statement found. No reviewer required."
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Notify if CREATE script is missing reviewer
         if: failure() && env.create_script == 'true'
@@ -93,7 +105,7 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "⚠️ No reviewer was assigned. Please assign a reviewer manually."
         env:
-          JWT_TOKEN: ${{ env.JWT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Review Notification
         if: success() && env.create_script == 'true'
@@ -101,4 +113,4 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "✅ Reviewer has been assigned and PR is pending approval before merge."
         env:
-          JWT_TOKEN: ${{ env.JWT_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
