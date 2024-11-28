@@ -8,10 +8,9 @@ on:
       - '.github/sql_script/**'  # Trigger workflow only when files in this path change
 
 permissions:
-  pull-requests: write  # Grants permission to modify pull requests
+  pull-requests: write  # Allows modifying pull request reviews (add reviewers, approve)
   contents: read        # Grants permission to read the contents of the repository
   issues: write         # Grants permission to create issues (if needed)
-  review-requests: write # Grants permission to manage review requests
 
 jobs:
   auto_approve:
@@ -79,5 +78,5 @@ jobs:
         echo "CREATE statements found. Adding 'notyou1231' as a reviewer."
         curl -X POST \
           -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"reviewers":["Notyou1231"]}' \
+          -d '{"reviewers":["notyou1231"]}' \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers"
