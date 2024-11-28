@@ -1,56 +1,93 @@
-name: Conditional Approval for SQL PRs
+name: Review and Merge SQL Scripts
 
 on:
   pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
     branches:
       - main
     paths:
-      - '.github/sql_scripts/**'  # Specify the path where your SQL scripts are located
+      - '.github/sql_script/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
 
 jobs:
-  auto_approve:
+  review_sql_scripts:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout the PR's code
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch full history for accurate diffing
 
-    # Step 2: Analyze SQL files in the PR for CREATE statements
-    - name: Analyze SQL files for CREATE statements
-      id: analyze_sql
-      run: |
-        # Fetch changed files from the PR
-        changed_files=$(jq -r '.pull_request.changed_files[] | select(contains(".sql"))' <<<"${{ toJSON(github.event) }}")
-        create_found=false
-        
-        # Loop through each changed SQL file and check for CREATE statements
-        for file in $changed_files; do
-          if grep -iq "CREATE " "$file"; then
-            create_found=true
-            break
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Check for CREATE statements in SQL files
+        id: check_sql_changes
+        run: |
+          # Use explicit base and head SHAs for diffing
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+
+          echo "Changed SQL files: $CHANGED_FILES"
+
+          # Initialize environment variable for script evaluation
+          CREATE_STATEMENT_FOUND=false
+
+          if [ -n "$CHANGED_FILES" ]; then
+            for file in $CHANGED_FILES; do
+              if [ -f "$file" ]; then
+                echo "Analyzing file: $file"
+
+                # Remove single-line and multiline comments, then check for CREATE statements
+                SQL_CONTENT=$(sed -E '/^\s*--/d' "$file" | sed -E ':a;N;$!ba;s/\s*\/\*.*?\*\///g')
+                if echo "$SQL_CONTENT" | grep -iq "CREATE"; then
+                  CREATE_STATEMENT_FOUND=true
+                  echo "CREATE statement found in $file"
+                  break
+                fi
+              fi
+            done
           fi
-        done
-        
-        # Set the result as an environment variable
-        echo "create_found=$create_found" >> "$GITHUB_ENV"
 
-    # Step 3: Auto-approve PR if no CREATE statements found
-    - name: Auto-approve PR if no CREATE statements found
-      if: env.create_found == 'false'
-      uses: hmarr/auto-approve-action@v3
-      with:
-        github-token: ${{ secrets.GITHUB_TOKEN }}
-      
-    # Step 4: Request review if CREATE statements are found
-    - name: Request review from notyou1231 if CREATE statements are found
-      if: env.create_found == 'true'
-      run: |
-        curl -X POST \
-          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"reviewers":["Notyou1231"]}' \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers"
+          # Set the appropriate environment variable
+          if [ "$CREATE_STATEMENT_FOUND" = true ]; then
+            echo "create_script=true" >> "$GITHUB_ENV"
+          else
+            echo "create_script=false" >> "$GITHUB_ENV"
+          fi
+
+      - name: Log message and assign reviewer
+        run: |
+          if [ "$create_script" = "true" ]; then
+            echo "✅ CREATE statement detected. Reviewer required: Notyou1231"
+            # Add reviewer to PR using GitHub CLI
+            gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 || true
+          else
+            echo "ℹ️ No CREATE statement found. Auto-approving the PR."
+
+            # Auto-approve PR if no CREATE statement found
+            gh pr review ${{ github.event.pull_request.number }} --approve || true
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Notify if CREATE script is missing reviewer
+        if: failure() && env.create_script == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "⚠️ No reviewer was assigned. Please assign a reviewer manually."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Review Notification
+        if: success() && env.create_script == 'true'
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} \
+            --body "✅ Reviewer has been assigned and PR is pending approval before merge."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
