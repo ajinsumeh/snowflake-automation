@@ -75,7 +75,7 @@ jobs:
           echo "ℹ️ No CREATE statement found. Auto-approving PR."
           gh pr review ${{ github.event.pull_request.number }} --approve --body "✅ Auto-approved as no CREATE statements detected."
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.AJ_PA_TOKEN }}
 
       - name: Notify if reviewer was assigned
         if: env.create_script == 'true'
@@ -91,4 +91,4 @@ jobs:
           gh pr comment ${{ github.event.pull_request.number }} \
             --body "✅ PR auto-approved as no CREATE statements were found."
         env:
-          GH_TOKEN: ${{ secrets.AJ_PA_TOKEN }}
+          GH_TOKEN: ${{ secrets.PA_TOKEN }}
