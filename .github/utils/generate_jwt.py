@@ -4,7 +4,7 @@ from jose import jwt as jose_jwt
 
 # Load private key from file
 private_key = open('.github/private/prreviewajin2024.2024-11-28.private-key.pem', 'r').read()
-
+print(private_key)
 # GitHub App ID
 app_id = '1072194'  # Replace with your actual GitHub App ID
 
