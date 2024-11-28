@@ -21,3 +21,7 @@ jwt_token = jwt.encode(jwt_payload, private_key, algorithm="RS256")
 
 # Print the JWT token to the console
 print("Generated JWT Token: ", jwt_token)
+print("Token part 1: ", jwt_token[:50])
+
+# Print the rest of the token
+print("Token part 2: ", jwt_token[50:])
