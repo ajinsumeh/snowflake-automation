@@ -3,6 +3,9 @@ name: Auto Approve PR and SQL Diff
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches:
+      - main
 
 jobs:
   approve_pr_and_diff:
@@ -29,7 +32,7 @@ jobs:
         id: jwt
         run: |
           python .github/utils/generate_jwt.py
-          echo "JWT_TOKEN=$(cat .github/utils/jwt_token.txt)" >> $GITHUB_ENV
+          echo "JWT_TOKEN=$(cat .github/secrets/jwt_token.txt)" >> $GITHUB_ENV
 
       # Step 4: Fetch Installation Token using JWT
       - name: Fetch Installation Token
@@ -39,15 +42,21 @@ jobs:
           https://api.github.com/app/installations/INSTALLATION_ID/access_tokens | jq -r '.token')
           echo "INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> $GITHUB_ENV
 
-      # Step 5: Use Installation Token to interact with GitHub API
+      # Step 5: Use explicit base and head SHAs for diffing
       - name: Use explicit base and head SHAs for diffing
         run: |
-          BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
-          HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
+          if [ -z "$GITHUB_BASE_REF" ]; then
+            echo "Not a pull request event, using push event reference"
+            BASE_SHA=$GITHUB_SHA
+            HEAD_SHA=$GITHUB_SHA
+          else
+            BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
+            HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
+          fi
           echo "Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
-
-          # List Changed SQL Files
-          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '\.sql$')
+          
+          # List Changed SQL Files in sql_scripts folder
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^sql_scripts/.*\.sql$')
           echo "Changed SQL files: $CHANGED_FILES"
           
           if [ -z "$CHANGED_FILES" ]; then
@@ -65,4 +74,3 @@ jobs:
             export GH_TOKEN=$INSTALLATION_TOKEN
             PR_NUMBER=$(jq --raw-output .pull_request.number $GITHUB_EVENT_PATH)
             gh pr review --approve --body "Auto-approved by GitHub App" $PR_NUMBER
-          fi
