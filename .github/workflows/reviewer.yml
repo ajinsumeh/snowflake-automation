@@ -2,15 +2,14 @@ name: Conditional Approval for SQL PRs
 
 on:
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
     branches:
       - main
     paths:
-      - '.github/sql_script/**'  # Trigger workflow only when files in this path change
-
-permissions:
-  pull-requests: write  # Allows modifying pull request reviews (add reviewers, approve)
-  contents: read        # Grants permission to read the contents of the repository
-  issues: write         # Grants permission to create issues (if needed)
+      - '.github/sql_scripts/**'  # Specify the path where your SQL scripts are located
 
 jobs:
   auto_approve:
@@ -21,62 +20,37 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v3
 
-    # Step 2: Get the list of changed files from the PR
-    - name: Get changed files from PR
-      id: changed_files
-      run: |
-        PR_NUMBER=${{ github.event.pull_request.number }}
-        CHANGED_FILES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${PR_NUMBER}}/files" | jq -r '.[].filename')
-
-        echo "Changed files: $CHANGED_FILES"
-        
-        # Set the changed files as an environment variable
-        echo "changed_files=$CHANGED_FILES" >> $GITHUB_ENV
-
-    # Step 3: Analyze SQL files for CREATE statements
+    # Step 2: Analyze SQL files in the PR for CREATE statements
     - name: Analyze SQL files for CREATE statements
       id: analyze_sql
       run: |
+        # Fetch changed files from the PR
+        changed_files=$(jq -r '.pull_request.changed_files[] | select(contains(".sql"))' <<<"${{ toJSON(github.event) }}")
         create_found=false
-
-        # Loop through each changed file and check if it's a SQL file and contains a CREATE statement
-        for file in ${{ env.changed_files }}; do
-          if [[ "$file" == *.sql ]]; then
-            if curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-              "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.sha }}/$file" | grep -iq "CREATE "; then
-              create_found=true
-              break
-            fi
+        
+        # Loop through each changed SQL file and check for CREATE statements
+        for file in $changed_files; do
+          if grep -iq "CREATE " "$file"; then
+            create_found=true
+            break
           fi
         done
         
         # Set the result as an environment variable
-        echo "create_found=$create_found" >> $GITHUB_ENV
-        
-    # Step 4: Auto-approve PR if no CREATE statements found, and add bot as reviewer
+        echo "create_found=$create_found" >> "$GITHUB_ENV"
+
+    # Step 3: Auto-approve PR if no CREATE statements found
     - name: Auto-approve PR if no CREATE statements found
       if: env.create_found == 'false'
-      run: |
-        echo "No CREATE statements found. Adding GitHub Bot as a reviewer and auto-approving the PR."
-        # Add GitHub bot as reviewer
-        curl -X POST \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"reviewers":["github-bot"]}' \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers"
-        
-        # Auto-approve the PR
-        curl -X POST \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"event":"APPROVE"}' \
-          "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/reviews"
-
-    # Step 5: Add 'notyou1231' as reviewer if CREATE statements are found
-    - name: Add 'notyou1231' as reviewer if CREATE statement is found
+      uses: hmarr/auto-approve-action@v3
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+      
+    # Step 4: Request review if CREATE statements are found
+    - name: Request review from notyou1231 if CREATE statements are found
       if: env.create_found == 'true'
       run: |
-        echo "CREATE statements found. Adding 'notyou1231' as a reviewer."
         curl -X POST \
-          -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-          -d '{"reviewers":["notyou1231"]}' \
+          -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+          -d '{"reviewers":["Notyou1231"]}' \
           "https://api.github.com/repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/requested_reviewers"
