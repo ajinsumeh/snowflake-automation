@@ -2,10 +2,11 @@ name: Auto Approve PR and SQL Diff
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
-  push:
     branches:
-      - main
+      - main  # Fixed the branch declaration
+    types: [opened, synchronize, reopened]
+    paths:
+      - '.github/sql_script/**'  # Correct path matching for your SQL scripts
 
 jobs:
   approve_pr_and_diff:
@@ -25,14 +26,14 @@ jobs:
 
       - name: Install dependencies
         run: |
-          pip install python-jose pyjwt cryptography
+          pip install python-jose pyjwt cryptography jq
 
       # Step 3: Generate JWT token for GitHub App authentication
       - name: Generate JWT Token
         id: jwt
         run: |
           python .github/utils/generate_jwt.py
-          echo "JWT_TOKEN=$(cat .github/secrets/jwt_token.txt)" >> $GITHUB_ENV
+          echo "JWT_TOKEN=$(cat .github/utils/jwt_token.txt)" >> $GITHUB_ENV
 
       # Step 4: Fetch Installation Token using JWT
       - name: Fetch Installation Token
@@ -45,18 +46,19 @@ jobs:
       # Step 5: Use explicit base and head SHAs for diffing
       - name: Use explicit base and head SHAs for diffing
         run: |
-          if [ -z "$GITHUB_BASE_REF" ]; then
-            echo "Not a pull request event, using push event reference"
-            BASE_SHA=$GITHUB_SHA
-            HEAD_SHA=$GITHUB_SHA
-          else
+          # Check if it's a PR event
+          if [ -n "$GITHUB_BASE_REF" ]; then
             BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
             HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
+          else
+            # For push events, we can use the same SHA for both base and head
+            BASE_SHA=$GITHUB_SHA
+            HEAD_SHA=$GITHUB_SHA
           fi
           echo "Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
           
           # List Changed SQL Files in sql_scripts folder
-          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^sql_scripts/.*\.sql$')
+          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^\.github/sql_script/.*\.sql$')
           echo "Changed SQL files: $CHANGED_FILES"
           
           if [ -z "$CHANGED_FILES" ]; then
