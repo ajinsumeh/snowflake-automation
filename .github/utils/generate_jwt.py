@@ -1,5 +1,6 @@
 import jwt
 import time
+import os
 from datetime import datetime, timedelta
 from jose import jwt as jose_jwt
 
@@ -19,8 +20,14 @@ jwt_payload = {
 # Encode the JWT
 jwt_token = jwt.encode(jwt_payload, private_key, algorithm="RS256")
 
-# Save the JWT token to a file (e.g., .github/secrets/jwt_token.txt)
-with open(".github/secrets/jwt_token.txt", "w") as file:
+# Print token to console for debugging
+print("Generated JWT Token: ", jwt_token)
+
+# Ensure the folder exists for saving the JWT token
+os.makedirs('.github/secrets', exist_ok=True)
+
+# Save the JWT token to the file
+with open('.github/secrets/jwt_token.txt', 'w') as file:
     file.write(jwt_token)
 
 print("JWT token generated and saved.")
