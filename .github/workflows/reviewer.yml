@@ -1,75 +1,27 @@
-name: Auto Approve PR and SQL Diff
+name: Auto-approve PR for Specific Paths
 
 on:
   pull_request:
     branches:
       - main
-    types: [opened, synchronize, reopened]
     paths:
-      - '.github/sql_script/**'  # Path to monitor for SQL file changes
-
-permissions:
-  contents: read
-  pull-requests: write
-  issues: write
+      - '.github/sql_script/**'  # Trigger when files in this path are changed
 
 jobs:
-  approve_pr_and_diff:
+  approve_pr:
     runs-on: ubuntu-latest
     steps:
-      
-      # Step 1: Checkout the code
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0  # Fetch full history to ensure accurate SHA references
 
-      # Step 2: Set up Python and install dependencies
-      - name: Set up Python
-        uses: actions/setup-python@v3
-        with:
-          python-version: 3.x
-
-      - name: Install dependencies
+      - name: Approve PR using GitHub API as Code Owner
+        env:
+          GH_TOKEN: ${{ secrets.HK_PA_TOKEN }}  # PAT for 'Notyou1231'
         run: |
-          pip install PyJWT cryptography requests
+          PR_NUMBER=$(jq --raw-output .pull_request.number < $GITHUB_EVENT_PATH)
+          REPO_NAME=$(jq --raw-output .repository.full_name < $GITHUB_EVENT_PATH)
 
-      # Step 3: Generate JWT Token
-      - name: Generate JWT Token
-        run: |
-          python .github/utils/generate_jwt.py
-          echo "JWT_TOKEN=$(cat .github/secrets/jwt_token.txt)" >> $GITHUB_ENV
-
-      # Step 4: Fetch Installation Token
-      - name: Fetch Installation Token
-        run: |
-          INSTALLATION_TOKEN=$(curl -X POST -H "Authorization: Bearer $JWT_TOKEN" \
-          -H "Accept: application/vnd.github+json" \
-          https://api.github.com/app/installations/INSTALLATION_ID/access_tokens | jq -r '.token')
-          echo "INSTALLATION_TOKEN=$INSTALLATION_TOKEN" >> $GITHUB_ENV
-
-      # Step 5: Check for changed SQL files
-      - name: Check for Changed SQL Files
-        run: |
-          BASE_SHA=$(git rev-parse --short $GITHUB_BASE_REF)
-          HEAD_SHA=$(git rev-parse --short $GITHUB_SHA)
-          echo "Base SHA: $BASE_SHA, Head SHA: $HEAD_SHA"
-          
-          # List Changed SQL Files
-          CHANGED_FILES=$(git diff --name-only $BASE_SHA $HEAD_SHA | grep -E '^.github/sql_scripts/.*\.sql$')
-          echo "Changed SQL files: $CHANGED_FILES"
-          
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "No SQL files changed. Skipping PR approval."
-            exit 0
-          fi
-
-      # Step 6: Check for CREATE statement and auto-approve PR if absent
-      - name: Auto-approve the PR if no CREATE statement found
-        run: |
-          if grep -q "CREATE" <<< "$CHANGED_FILES"; then
-            echo "CREATE statement found. Reviewer approval required."
-          else
-            echo "No CREATE statement found. Auto-approving the PR."
-            PR_NUMBER=$(jq --raw-output .pull_request.number $GITHUB_EVENT_PATH)
-            gh pr review --approve --body "Auto-approved by GitHub App" $PR_NUMBER
+          curl -X POST \
+            -H "Authorization: token $GH_TOKEN" \
+            -d '{"event":"APPROVE","body":"Auto-approving this PR by Code Owner"}' \
+            "https://api.github.com/repos/$REPO_NAME/pulls/$PR_NUMBER/reviews"
