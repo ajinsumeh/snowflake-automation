@@ -90,19 +90,12 @@ jobs:
         run: |
           MESSAGE=$(cat <<EOF
           {
-            "Subject": "🔍 SQL Script Review Required",
-            "Message": "# 🚨 Manual Review Required for SQL Changes\n\n\
-            ### Pull Request Details\n\
-            📌 **PR #${{ github.event.pull_request.number }}**\n\n\
-            👉 **Quick Actions:**\n\
-            ✅ [Approve PR](${{ github.event.pull_request.html_url }}/approve)\n\
-            ❌ [Reject PR](${{ github.event.pull_request.html_url }}/reject)\n\n\
-            📝 **Additional Information:**\n\
-            - 🔗 [View Pull Request](${{ github.event.pull_request.html_url }})\n\
-            - 📂 Changed Files: ${{ steps.check_sql_changes.outputs.changed_files }}\n\n\
-            ⚠️ *This PR contains CREATE statements and requires manual review.*\n\n\
-            ---\n\
-            *Automated notification from GitHub Actions*",
+            "Subject": "Manual Review Required for SQL Script Changes",
+            "Message": "Pull Request #${{ github.event.pull_request.number }} requires manual review.\\n\\n\
+            PR Link: ${{ github.event.pull_request.html_url }}\\n\
+            Changed Files: ${{ steps.check_sql_changes.outputs.changed_files }}\\n\
+            Approve: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/approve\\n\
+            Reject: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/reject",
             "TopicArn": "${{ secrets.AWS_SNS_TOPIC_ARN }}"
           }
           EOF
