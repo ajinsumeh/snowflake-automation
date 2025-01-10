@@ -94,7 +94,7 @@ jobs:
             "Message": "Pull Request #${{ github.event.pull_request.number }} requires manual review.\\n\\n\
             PR Link: ${{ github.event.pull_request.html_url }}\\n\
             Changed Files: ${{ steps.check_sql_changes.outputs.changed_files }}\\n\
-            Approve: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/fies\\n\
+            Approve: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/files\\n\
             Reject: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/files",
             "TopicArn": "${{ secrets.AWS_SNS_TOPIC_ARN }}"
           }
