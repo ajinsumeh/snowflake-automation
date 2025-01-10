@@ -31,6 +31,7 @@ jobs:
         run: |
           CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
           echo "Changed SQL files: $CHANGED_FILES"
+          echo "changed_files=$CHANGED_FILES" >> "$GITHUB_OUTPUT"
 
           CREATE_STATEMENT_FOUND=false
           if [ -n "$CHANGED_FILES" ]; then
@@ -87,30 +88,27 @@ jobs:
       - name: Notify via AWS SNS
         if: env.create_script == 'true'
         run: |
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
-          
           MESSAGE=$(cat <<EOF
-{
-  "Subject": "Manual Review Required for SQL Script Changes",
-  "Message": "<h3>Pull Request #${{ github.event.pull_request.number }} requires manual review.</h3>
-  <p><strong>PR Link:</strong> <a href=\\"${{ github.event.pull_request.html_url }}\\">View PR</a></p>
-  
-  <p><strong>Changed Files:</strong></p>
-  <ul>
-    $(for file in $CHANGED_FILES; do echo "<li>$file</li>"; done)
-  </ul>
-  
-  <div style=\\"margin-top: 20px;\\">
-    <a href=\\"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/approve\\" style=\\"padding: 10px 20px; background-color: green; color: white; text-decoration: none; border-radius: 5px;\\">Approve</a>
-    <a href=\\"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/reject\\" style=\\"padding: 10px 20px; background-color: red; color: white; text-decoration: none; border-radius: 5px; margin-left: 10px;\\">Reject</a>
-  </div>
-  <br>
-  <p>If you wish to stop receiving notifications from this topic, you can unsubscribe by clicking <a href=\\"https://sns.***.amazonaws.com/unsubscribe.html?SubscriptionArn=arn:aws:sns:***:767397784856:ReviewNotifications:36e5d695-9f93-476f-9a87-c3c8f72592c7&Endpoint=sumeshmgwork@gmail.com\\">here</a>.</p>"
-}
-EOF
-)
-
-          echo "$MESSAGE" | aws sns publish --cli-input-json file:///dev/stdin --region "${{ secrets.AWS_REGION }}"
+          {
+            "Subject": "🔍 SQL Script Review Required",
+            "Message": "# 🚨 Manual Review Required for SQL Changes\n\n\
+            ### Pull Request Details\n\
+            📌 **PR #${{ github.event.pull_request.number }}**\n\n\
+            👉 **Quick Actions:**\n\
+            ✅ [Approve PR](${{ github.event.pull_request.html_url }}/approve)\n\
+            ❌ [Reject PR](${{ github.event.pull_request.html_url }}/reject)\n\n\
+            📝 **Additional Information:**\n\
+            - 🔗 [View Pull Request](${{ github.event.pull_request.html_url }})\n\
+            - 📂 Changed Files: ${{ steps.check_sql_changes.outputs.changed_files }}\n\n\
+            ⚠️ *This PR contains CREATE statements and requires manual review.*\n\n\
+            ---\n\
+            *Automated notification from GitHub Actions*",
+            "TopicArn": "${{ secrets.AWS_SNS_TOPIC_ARN }}"
+          }
+          EOF
+          )
+          echo "$MESSAGE"
+          aws sns publish --cli-input-json "$MESSAGE" --region "${{ secrets.AWS_REGION }}"
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
