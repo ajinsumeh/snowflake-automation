@@ -84,18 +84,32 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PA_TOKEN }}
 
-      - name: Notify via AWS SNS
+      - name: Notify via AWS SNS (HTML-formatted message)
         if: env.create_script == 'true'
         run: |
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E '\.github/sql_script/.*\.(sql|txt)$' || true)
+          FILE_LIST=""
+          for file in $CHANGED_FILES; do
+            FILE_LIST="$FILE_LIST<li>$file</li>"
+          done
+
           MESSAGE=$(cat <<EOF
           {
             "Subject": "Manual Review Required for SQL Script Changes",
-            "Message": "Pull Request #${{ github.event.pull_request.number }} requires manual review.\\n\\n\
-            PR Link: ${{ github.event.pull_request.html_url }}\\n\
-            Changed Files: ${{ steps.check_sql_changes.outputs.CHANGED_FILES }}\\n\
-            Approve: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/approve\\n\
-            Reject: https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/reject",
-            "TopicArn": "${{ secrets.AWS_SNS_TOPIC_ARN }}"
+            "Message": "<h3>Pull Request #${{ github.event.pull_request.number }} requires manual review.</h3>
+            <p><strong>PR Link:</strong> <a href=\"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}\">View PR</a></p>
+            
+            <p><strong>Changed Files:</strong></p>
+            <ul>
+              $FILE_LIST
+            </ul>
+            
+            <div style=\"margin-top: 20px;\">
+              <a href=\"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/approve\" style=\"padding: 10px 20px; background-color: green; color: white; text-decoration: none; border-radius: 5px;\">Approve</a>
+              <a href=\"https://github.com/${{ github.repository }}/pull/${{ github.event.pull_request.number }}/reject\" style=\"padding: 10px 20px; background-color: red; color: white; text-decoration: none; border-radius: 5px; margin-left: 10px;\">Reject</a>
+            </div>
+            <br>
+            <p>If you wish to stop receiving notifications from this topic, you can unsubscribe by clicking <a href=\"https://sns.eu-central-1.amazonaws.com/unsubscribe.html?SubscriptionArn=arn:aws:sns:eu-central-1:767397784856:ReviewNotifications:36e5d695-9f93-476f-9a87-c3c8f72592c7&Endpoint=sumeshmgwork@gmail.com\">here</a>.</p>"
           }
           EOF
           )
