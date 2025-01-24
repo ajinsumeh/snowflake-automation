@@ -57,7 +57,7 @@ jobs:
         if: env.create_script == 'true'
         run: |
           echo "✅ CREATE statement detected. Assigning reviewer: sumeshmg"
-          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer Notyou1231 --add-reviewer sumeshmg || true
+          gh pr edit ${{ github.event.pull_request.number }} --add-reviewer sumeshmg || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
