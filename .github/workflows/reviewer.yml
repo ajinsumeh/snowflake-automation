@@ -8,7 +8,7 @@ on:
       - '.github/sql_script/**'
 
 permissions:
-  contents: write
+  contents: read
   pull-requests: write
 
 jobs:
@@ -64,9 +64,10 @@ jobs:
       - name: Auto-approve PR if no CREATE statement
         if: env.create_script == 'false'
         run: |
+          echo "ℹ️ No CREATE statement found. Auto-approving PR."
           gh pr review ${{ github.event.pull_request.number }} --approve --body "✅ Auto-approved as no CREATE statements detected."
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PA_TOKEN }}
 
       - name: Notify if reviewer was assigned
         if: env.create_script == 'true'
